@@ -1,0 +1,13 @@
+Language: Cpp
+BasedOnStyle: GNU
+IndentWidth: 4
+PointerAlignment: Left
+AlignConsecutiveAssignments: Consecutive
+AlignConsecutiveMacros: AcrossEmptyLines
+AlignEscapedNewlines: Right
+IndentCaseLabels: true
+IndentCaseBlocks: true
+IndentPPDirectives: AfterHash
+AllowShortBlocksOnASingleLine: Always
+AllowShortIfStatementsOnASingleLine: WithoutElse
+AllowAllArgumentsOnNextLine: true
