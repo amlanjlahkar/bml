@@ -1,5 +1,5 @@
 Language: Cpp
-BasedOnStyle: GNU
+BasedOnStyle: LLVM
 IndentWidth: 4
 PointerAlignment: Left
 AlignConsecutiveAssignments: Consecutive
@@ -10,4 +10,5 @@ IndentCaseBlocks: true
 IndentPPDirectives: AfterHash
 AllowShortBlocksOnASingleLine: Always
 AllowShortIfStatementsOnASingleLine: WithoutElse
+AllowShortEnumsOnASingleLine: true
 AllowAllArgumentsOnNextLine: true
