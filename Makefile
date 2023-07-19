@@ -1,28 +1,32 @@
 CC=zig
 CFLAGS=cc -Wall -g -std=c17
-LDFLAGS=-ledit -lm
+LDFLAGS=-ledit
 
 SRCDIR=src
+OBJDIR=obj
 BINDIR=bin
 
 SOURCES:=$(wildcard $(SRCDIR)/*.c)
-OBJECTS:=$(patsubst $(SRCDIR)/%.c, $(BINDIR)/%, $(SOURCES))
+OBJECTS:=$(patsubst $(SRCDIR)/%.c, $(OBJDIR)/%.o, $(SOURCES))
 
+BIN:=$(BINDIR)/toosty
 
-ifndef verbose
+ifndef vb
 .SILENT:
 endif
 
+all: $(BIN)
 
-all: $(OBJECTS)
+$(BIN): $(OBJECTS)
+	$(CC) $(CFLAGS) $(LDFLAGS) $^ -o $@
 
-$(BINDIR)/%: $(SRCDIR)/%.c
-	$(CC) $(CFLAGS) $(LDFLAGS) $< -o $@
+$(OBJDIR)/%.o: $(SRCDIR)/%.c
+	$(CC) $(CFLAGS) -c $< -o $@
 
 .PHONY: clean run
 clean:
-	rm -f $(OBJECTS)
+	rm -f $(OBJECTS) $(BIN)
 
 run: $(OBJECTS)
-	./$(BINDIR)/parsing
+	$(BIN)
 
