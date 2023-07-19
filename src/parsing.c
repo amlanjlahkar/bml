@@ -1,155 +1,184 @@
-#include <editline/readline.h>
 #include <errno.h>
 #include <math.h>
-#include <stdbool.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 
-#include "../lib/mpc/mpc.c"
+#include "parsing.h"
 
-typedef struct {
-    int type;
-    long val;
-    int err;
-} tval;
-
-enum tval_type_res { TVAL_NUM, TVAL_ERR };
-enum tval_type_err { TERR_DIV_ZERO = 1, TERR_BAD_OP = 2, TERR_BAD_NUM = 3 };
-
-tval eval(mpc_ast_t*);
-tval eval_op(tval, char* op, tval);
-tval tval_res(long);
-tval tval_err(int);
-void tval_print(tval);
-
-int main(int argc, char** argv) {
-    mpc_parser_t* Number   = mpc_new("number");
-    mpc_parser_t* Operator = mpc_new("operator");
-    mpc_parser_t* Expr     = mpc_new("expr");
-    mpc_parser_t* Toosty   = mpc_new("toosty");
-
-    // clang-format off
-    mpca_lang (MPCA_LANG_DEFAULT,
-        "                                                                       \
-            number   : /-?[0-9]+/ ;                                             \
-            operator : '+' | '-' | '*' | '/' | '%' | '^' | \"min\" | \"max\" ;  \
-            expr     : <number> | '(' <operator> <expr>+ ')' ;                  \
-            toosty   : /^/ <operator> <expr>+ /$/ ;                             \
-        ",
-        Number, Operator, Expr, Toosty);
-    // clang-format on
-
-    while (true) {
-        char* ibuffer = readline("toosty> ");
-        add_history(ibuffer);
-
-        mpc_result_t r;
-
-        if (strcmp(ibuffer, "exit") == 0) {
-            free(ibuffer);
-            break;
-        }
-
-        if (mpc_parse("<stdin>", ibuffer, Toosty, &r)) {
-            void* ast = r.output;
-            // mpc_ast_print(ast);
-            tval result = eval(ast);
-            tval_print(result);
-            mpc_ast_delete(ast);
-        } else {
-            mpc_err_print(r.error);
-            mpc_err_delete(r.error);
-        }
-
-        free(ibuffer);
-    }
-
-    mpc_cleanup(4, Number, Operator, Expr, Toosty);
-
-    return EXIT_SUCCESS;
+tval* tval_num(long num) {
+    tval* v = malloc(sizeof(tval));
+    v->type = TVAL_NUM;
+    v->num = num;
+    return v;
 }
 
-tval eval(mpc_ast_t* t) {
-    if (strstr(t->tag, "number")) {
-        errno  = 0;
-        long x = strtol(t->contents, NULL, 10);
-        return errno != ERANGE ? tval_res(x) : tval_err(TERR_BAD_NUM);
+tval* tval_err(const char* err) {
+    tval* v = malloc(sizeof(tval));
+    v->type = TVAL_ERR;
+    v->err = malloc(strlen(err) + 1);
+    strcpy(v->err, err);
+    return v;
+}
+
+tval* tval_sym(const char* sym) {
+    tval* v = malloc(sizeof(tval));
+    v->type = TVAL_SYM;
+    v->sym = malloc(strlen(sym) + 1);
+    strcpy(v->sym, sym);
+    return v;
+}
+
+tval* tval_sexpr(void) {
+    tval* v = malloc(sizeof(tval));
+    v->type = TVAL_SEXPR;
+    v->count = 0;
+    v->list = NULL;
+    return v;
+}
+
+void tval_del(tval* v) {
+    switch (v->type) {
+        case TVAL_NUM: break;
+        case TVAL_ERR: free(v->err); break;
+        case TVAL_SYM: free(v->sym); break;
+        case TVAL_SEXPR:
+            for (size_t i = 0; i < v->count; i++)
+                tval_del(v->list[i]);
+            free(v->list);
+            break;
+    }
+    free(v);
+}
+
+tval* tval_read_num(mpc_ast_t* t) {
+    errno = 0;
+    long num = strtol(t->contents, NULL, 10);
+    return errno != ERANGE ? tval_num(num) : tval_err("Invalid number");
+}
+
+tval* tval_read_ast(mpc_ast_t* t) {
+    if (strstr(t->tag, "number")) return tval_read_num(t);
+    if (strstr(t->tag, "symbol")) return tval_sym(t->contents);
+
+    tval* v = NULL;
+    if (strcmp(t->tag, ">")) v = tval_sexpr();
+    if (strcmp(t->tag, "sexpr")) v = tval_sexpr();
+
+    for (size_t i = 0; i < t->children_num; i++) {
+        if (strcmp(t->children[i]->contents, "(") == 0) continue;
+        if (strcmp(t->children[i]->contents, ")") == 0) continue;
+        if (strcmp(t->children[i]->tag, "regex") == 0) continue;
+        v = tval_add(v, tval_read_ast(t->children[i]));
     }
 
-    char* op = t->children[1]->contents;
+    return v;
+}
 
-    tval x = eval(t->children[2]);
+tval* tval_add(tval* vcurr, tval* vnew) {
+    vcurr->count++;
+    vcurr->list = realloc(vcurr->list, sizeof(tval*) * vcurr->count);
+    vcurr->list[vcurr->count - 1] = vnew;
+    return vcurr;
+}
 
-    size_t i = 3;
-    while (strstr(t->children[i]->tag, "expr")) {
-        x = eval_op(x, op, eval(t->children[i]));
-        i++;
-    }
+tval* tval_pop(tval* v, size_t pos) {
+    tval* x = v->list[pos];
 
-    if (!(i ^ 3) && strcmp(op, "-") == 0) x.val -= 1;
-    if (!(i ^ 3) && strcmp(op, "+") == 0) x.val += 1;
+    memmove(&v->list[pos], &v->list[pos + 1],
+            sizeof(tval*) * (v->count - pos - 1));
 
+    v->count--;
+    v->list = realloc(v->list, sizeof(tval*) * v->count);
     return x;
 }
 
-tval eval_op(tval x, char* op, tval y) {
-    if (x.type == TVAL_ERR) return x;
-    if (y.type == TVAL_ERR) return y;
-
-    if (strcmp(op, "+") == 0) return tval_res(x.val + y.val);
-    if (strcmp(op, "-") == 0) return tval_res(x.val - y.val);
-    if (strcmp(op, "*") == 0) return tval_res(x.val * y.val);
-    if (strcmp(op, "^") == 0) return tval_res(pow(x.val, y.val));
-
-    if (strcmp(op, "/") == 0)
-        return y.val == 0 ? tval_err(TERR_DIV_ZERO) : tval_res(x.val / y.val);
-
-    if (strcmp(op, "%") == 0)
-        return y.val == 0 ? tval_err(TERR_DIV_ZERO) : tval_res(x.val % y.val);
-
-    if (strcmp(op, "min") == 0)
-        return tval_res((x.val < y.val) ? x.val : y.val);
-
-    if (strcmp(op, "max") == 0)
-        return tval_res((x.val > y.val) ? x.val : y.val);
-
-    return tval_err(TERR_BAD_OP);
+tval* tval_throw(tval* v, size_t pos) {
+    tval* x = tval_pop(v, pos);
+    tval_del(v);
+    return x;
 }
 
-tval tval_res(long result) {
-    tval v;
-    v.type = TVAL_NUM;
-    v.val  = result;
-    v.err = 0;
-    return v;
-}
+tval* operate(tval* v, const char* sym) {
+    for (size_t i = 0; i < v->count; i++) {
+        if (v->list[i]->type != TVAL_NUM) {
+            tval_del(v);
+            return tval_err("Can not operate on non number!");
+        }
+    }
 
-tval tval_err(int err) {
-    tval v;
-    v.type = TVAL_ERR;
-    v.err  = err;
-    return v;
-}
+    tval* current = tval_pop(v, 0);
+    while (v->count > 0) {
+        tval* next = tval_pop(v, 0);
 
-void tval_print(tval v) {
-    switch (v.type) {
-        case TVAL_NUM:
-            printf("%li\n", v.val);
-            break;
-
-        case TVAL_ERR:
-            switch (v.err) {
-                case TERR_DIV_ZERO:
-                    puts("Error: Attempted division by zero!");
-                    break;
-                case TERR_BAD_OP:
-                    puts("Error: Invalid operator!");
-                    break;
-                case TERR_BAD_NUM:
-                    puts("Error: Invalid number!");
-                    break;
+        if (strcmp(sym, "+") == 0) current->num += next->num;
+        if (strcmp(sym, "-") == 0) current->num -= next->num;
+        if (strcmp(sym, "*") == 0) current->num *= next->num;
+        if (strcmp(sym, "^") == 0) current->num = pow(current->num, next->num);
+        if (strcmp(sym, "/") == 0) {
+            if (next->num == 0) {
+                tval_del(next), tval_del(current);
+                current = tval_err("Division by zero isn't allowed!");
+                break;
             }
-            break;
+            current->num /= next->num;
+        }
+
+        if (strcmp(sym, "min") == 0)
+            current->num =
+                (current->num < next->num) ? current->num : next->num;
+
+        if (strcmp(sym, "max") == 0)
+            current->num =
+                (current->num > next->num) ? current->num : next->num;
+
+        tval_del(next);
+    }
+
+    tval_del(v);
+    return current;
+}
+
+tval* tval_eval_sexpr(tval* v) {
+    if (v->count == 0) return v;
+    if (v->count == 1) return tval_throw(v, 0);
+
+    for (size_t i = 0; i < v->count; i++)
+        v->list[i] = tval_eval(v->list[i]);
+
+    for (size_t i = 0; i < v->count; i++)
+        if (v->list[i]->type == TVAL_ERR) return tval_throw(v, i);
+
+    tval* init = tval_pop(v, 0);
+    if (init->type != TVAL_SYM) {
+        tval_del(init), tval_del(v);
+        return tval_err("S-Expression doesn't start with a symbol!");
+    }
+    tval* result = operate(v, init->sym);
+    tval_del(init);
+    return result;
+}
+
+tval* tval_eval(tval* v) {
+    if (v->type == TVAL_SEXPR) return tval_eval_sexpr(v);
+    return v;
+}
+
+void tval_print_expr(tval* v, const char sym_open, const char sym_close) {
+    putchar(sym_open);
+    for (size_t i = 0; i < v->count; i++) {
+        tval_print(v->list[i]);
+        if (i != (v->count - 1)) putchar(' ');
+    }
+    putchar(sym_close);
+}
+
+void tval_print(tval* v) {
+    switch (v->type) {
+        case TVAL_NUM: printf("%li", v->num); break;
+        case TVAL_ERR: printf("Error: %s", v->err); break;
+        case TVAL_SYM: printf("%s", v->sym); break;
+        case TVAL_SEXPR: tval_print_expr(v, '(', ')'); break;
     }
 }
+
+void tval_println(tval* v) { tval_print(v), putchar('\n'); }
