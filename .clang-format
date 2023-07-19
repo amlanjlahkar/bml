@@ -2,7 +2,6 @@ Language: Cpp
 BasedOnStyle: LLVM
 IndentWidth: 4
 PointerAlignment: Left
-AlignConsecutiveAssignments: Consecutive
 AlignConsecutiveMacros: AcrossEmptyLines
 AlignEscapedNewlines: Right
 IndentCaseLabels: true
@@ -12,3 +11,4 @@ AllowShortBlocksOnASingleLine: Always
 AllowShortIfStatementsOnASingleLine: WithoutElse
 AllowShortEnumsOnASingleLine: true
 AllowAllArgumentsOnNextLine: true
+AllowShortCaseLabelsOnASingleLine: true
