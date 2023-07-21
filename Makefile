@@ -15,7 +15,7 @@ ifndef vb
 .SILENT:
 endif
 
-all: $(BIN)
+all: clean run
 
 $(BIN): $(OBJECTS)
 	$(CC) $(CFLAGS) $(LDFLAGS) $^ -o $@
@@ -27,6 +27,6 @@ $(OBJDIR)/%.o: $(SRCDIR)/%.c
 clean:
 	rm -f $(OBJECTS) $(BIN)
 
-run: $(OBJECTS)
+run: $(BIN)
 	$(BIN)
 
