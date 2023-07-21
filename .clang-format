@@ -3,12 +3,14 @@ BasedOnStyle: LLVM
 IndentWidth: 4
 PointerAlignment: Left
 AlignConsecutiveMacros: AcrossEmptyLines
-AlignEscapedNewlines: Right
+AlignEscapedNewlines: Left
 IndentCaseLabels: true
 IndentCaseBlocks: true
 IndentPPDirectives: AfterHash
 AllowShortBlocksOnASingleLine: Always
 AllowShortIfStatementsOnASingleLine: WithoutElse
 AllowShortEnumsOnASingleLine: true
+AllowShortLoopsOnASingleLine: true
 AllowAllArgumentsOnNextLine: true
 AllowShortCaseLabelsOnASingleLine: true
+InsertBraces: true

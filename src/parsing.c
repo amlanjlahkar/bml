@@ -58,8 +58,7 @@ void tval_del(tval* v) {
         case TVAL_SYM: free(v->sym); break;
         case TVAL_QEXPR:
         case TVAL_SEXPR:
-            for (size_t i = 0; i < v->count; i++)
-                tval_del(v->list[i]);
+            for (size_t i = 0; i < v->count; i++) { tval_del(v->list[i]); }
             free(v->list);
             break;
     }
@@ -75,20 +74,20 @@ tval* tval_read_num(mpc_ast_t* t) {
 }
 
 tval* tval_read_ast(mpc_ast_t* t) {
-    if (strstr(t->tag, "number")) return tval_read_num(t);
-    if (strstr(t->tag, "symbol")) return tval_sym(t->contents);
+    if (strstr(t->tag, "number")) { return tval_read_num(t); }
+    if (strstr(t->tag, "symbol")) { return tval_sym(t->contents); }
 
     tval* v = NULL;
-    if (strcmp(t->tag, ">") == 0) v = tval_sexpr();
-    if (strstr(t->tag, "sexpr")) v = tval_sexpr();
-    if (strstr(t->tag, "qexpr")) v = tval_qexpr();
+    if (strcmp(t->tag, ">") == 0) { v = tval_sexpr(); }
+    if (strstr(t->tag, "sexpr")) { v = tval_sexpr(); }
+    if (strstr(t->tag, "qexpr")) { v = tval_qexpr(); }
 
     for (size_t i = 0; i < t->children_num; i++) {
-        if (strcmp(t->children[i]->contents, "{") == 0) continue;
-        if (strcmp(t->children[i]->contents, "}") == 0) continue;
-        if (strcmp(t->children[i]->contents, "(") == 0) continue;
-        if (strcmp(t->children[i]->contents, ")") == 0) continue;
-        if (strcmp(t->children[i]->tag, "regex") == 0) continue;
+        if (strcmp(t->children[i]->contents, "{") == 0) { continue; }
+        if (strcmp(t->children[i]->contents, "}") == 0) { continue; }
+        if (strcmp(t->children[i]->contents, "(") == 0) { continue; }
+        if (strcmp(t->children[i]->contents, ")") == 0) { continue; }
+        if (strcmp(t->children[i]->tag, "regex") == 0) { continue; }
         v = tval_add(v, tval_read_ast(t->children[i]));
     }
 
@@ -120,9 +119,7 @@ tval* tval_throw(tval* v, size_t pos) {
 }
 
 tval* tval_join(tval* dest, tval* src) {
-    while (src->count)
-        dest = tval_add(dest, tval_pop(src, 0));
-
+    while (src->count) { dest = tval_add(dest, tval_pop(src, 0)); }
     tval_del(src);
     return dest;
 }
@@ -140,8 +137,7 @@ tval* op_head(tval* q) {
     TASSERT(q, q->list[0]->count > 0, "Got empty qexpr!");
 
     tval* v = tval_throw(q, 0);
-    while (v->count > 1)
-        tval_del(tval_pop(v, 1));
+    while (v->count > 1) { tval_del(tval_pop(v, 1)); }
     return v;
 }
 
@@ -164,9 +160,7 @@ tval* op_join(tval* v) {
     }
 
     tval* x = tval_pop(v, 0);
-    while (v->count)
-        x = tval_join(x, tval_pop(v, 0));
-
+    while (v->count) { x = tval_join(x, tval_pop(v, 0)); }
     return x;
 }
 
@@ -232,10 +226,10 @@ tval* op_arith(tval* v, const char* sym) {
     while (v->count > 0) {
         tval* next = tval_pop(v, 0);
 
-        if (strcmp(sym, "+") == 0) curr->num += next->num;
-        if (strcmp(sym, "-") == 0) curr->num -= next->num;
-        if (strcmp(sym, "*") == 0) curr->num *= next->num;
-        if (strcmp(sym, "^") == 0) curr->num = pow(curr->num, next->num);
+        if (strcmp(sym, "+") == 0) { curr->num += next->num; }
+        if (strcmp(sym, "-") == 0) { curr->num -= next->num; }
+        if (strcmp(sym, "*") == 0) { curr->num *= next->num; }
+        if (strcmp(sym, "^") == 0) { curr->num = pow(curr->num, next->num); }
         if (strcmp(sym, "/") == 0) {
             if (next->num == 0) {
                 tval_del(next), tval_del(curr);
@@ -253,28 +247,30 @@ tval* op_arith(tval* v, const char* sym) {
 }
 
 tval* operate(tval* v, const char* op) {
-    if (strcmp("list", op) == 0) return op_list(v);
-    if (strcmp("head", op) == 0) return op_head(v);
-    if (strcmp("tail", op) == 0) return op_tail(v);
-    if (strcmp("join", op) == 0) return op_join(v);
-    if (strcmp("eval", op) == 0) return op_eval(v);
-    if (strcmp("min", op) == 0) return op_min(v);
-    if (strcmp("max", op) == 0) return op_max(v);
-    if (strstr("+-/*^", op)) return op_arith(v, op);
+    if (strcmp("list", op) == 0) { return op_list(v); }
+    if (strcmp("head", op) == 0) { return op_head(v); }
+    if (strcmp("tail", op) == 0) { return op_tail(v); }
+    if (strcmp("join", op) == 0) { return op_join(v); }
+    if (strcmp("eval", op) == 0) { return op_eval(v); }
+    if (strcmp("min", op) == 0) { return op_min(v); }
+    if (strcmp("max", op) == 0) { return op_max(v); }
+    if (strstr("+-/*^", op)) { return op_arith(v, op); }
 
     tval_del(v);
     return tval_err("Undefined function!");
 }
 
 tval* tval_eval_sexpr(tval* v) {
-    for (size_t i = 0; i < v->count; i++)
+    for (size_t i = 0; i < v->count; i++) {
         v->list[i] = tval_eval(v->list[i]);
+    }
 
-    for (size_t i = 0; i < v->count; i++)
-        if (v->list[i]->type == TVAL_ERR) return tval_throw(v, i);
+    for (size_t i = 0; i < v->count; i++) {
+        if (v->list[i]->type == TVAL_ERR) { return tval_throw(v, i); }
+    }
 
-    if (v->count == 0) return v;
-    if (v->count == 1) return tval_throw(v, 0);
+    if (v->count == 0) { return v; }
+    if (v->count == 1) { return tval_throw(v, 0); }
 
     tval* init = tval_pop(v, 0);
     if (init->type != TVAL_SYM) {
@@ -295,7 +291,7 @@ void tval_print_expr(tval* v, const char sym_open, const char sym_close) {
     putchar(sym_open);
     for (size_t i = 0; i < v->count; i++) {
         tval_print(v->list[i]);
-        if (i != (v->count - 1)) putchar(' ');
+        if (i != (v->count - 1)) { putchar(' '); }
     }
     putchar(sym_close);
 }
