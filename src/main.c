@@ -8,18 +8,21 @@ int main(void) {
     mpc_parser_t* Symbol = mpc_new("symbol");
     mpc_parser_t* Expr = mpc_new("expr");
     mpc_parser_t* Sexpr = mpc_new("sexpr");
+    mpc_parser_t* Qexpr = mpc_new("qexpr");
     mpc_parser_t* Toosty = mpc_new("toosty");
 
     // clang-format off
     mpca_lang (MPCA_LANG_DEFAULT,
         "                                                                       \
             number   : /-?[0-9]+/ ;                                             \
-            symbol   : '+' | '-' | '*' | '/' | '%' | '^' | \"min\" | \"max\" ;  \
+            symbol   : '+' | '-' | '*' | '/' | '%' | '^' | \"min\" | \"max\"    \
+                     | \"list\" | \"head\" | \"tail\" | \"join\" | \"eval\" ;   \
             sexpr    : '(' <expr>* ')' ;                                        \
-            expr     : <number> | <symbol> | <sexpr> ;                          \
+            qexpr    : '{' <expr>* '}' ;                                        \
+            expr     : <number> | <symbol> | <sexpr> | <qexpr> ;                \
             toosty   : /^/ <expr>* /$/ ;                                        \
         ",
-        Number, Symbol, Sexpr, Expr, Toosty);
+        Number, Symbol, Sexpr, Qexpr, Expr, Toosty);
     // clang-format on
 
     while (1) {
@@ -48,7 +51,7 @@ int main(void) {
         free(ibuffer);
     }
 
-    mpc_cleanup(5, Number, Symbol, Sexpr, Expr, Toosty);
+    mpc_cleanup(6, Number, Symbol, Sexpr, Qexpr, Expr, Toosty);
 
     return 0;
 }

@@ -1,9 +1,16 @@
 #include <errno.h>
 #include <math.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "parsing.h"
+
+#define TASSERT(args, cond, err) \
+    if (!(cond)) {               \
+        tval_del(args);          \
+        return tval_err(err);    \
+    }
 
 tval* tval_num(long num) {
     tval* v = malloc(sizeof(tval));
@@ -36,11 +43,20 @@ tval* tval_sexpr(void) {
     return v;
 }
 
+tval* tval_qexpr(void) {
+    tval* v = malloc(sizeof(tval));
+    v->type = TVAL_QEXPR;
+    v->count = 0;
+    v->list = NULL;
+    return v;
+}
+
 void tval_del(tval* v) {
     switch (v->type) {
         case TVAL_NUM: break;
         case TVAL_ERR: free(v->err); break;
         case TVAL_SYM: free(v->sym); break;
+        case TVAL_QEXPR:
         case TVAL_SEXPR:
             for (size_t i = 0; i < v->count; i++)
                 tval_del(v->list[i]);
@@ -53,7 +69,9 @@ void tval_del(tval* v) {
 tval* tval_read_num(mpc_ast_t* t) {
     errno = 0;
     long num = strtol(t->contents, NULL, 10);
-    return errno != ERANGE ? tval_num(num) : tval_err("Invalid number");
+    return errno != ERANGE
+               ? tval_num(num)
+               : tval_err("Couldn't parse s-expression(invalid number)!");
 }
 
 tval* tval_read_ast(mpc_ast_t* t) {
@@ -61,10 +79,13 @@ tval* tval_read_ast(mpc_ast_t* t) {
     if (strstr(t->tag, "symbol")) return tval_sym(t->contents);
 
     tval* v = NULL;
-    if (strcmp(t->tag, ">")) v = tval_sexpr();
-    if (strcmp(t->tag, "sexpr")) v = tval_sexpr();
+    if (strcmp(t->tag, ">") == 0) v = tval_sexpr();
+    if (strstr(t->tag, "sexpr")) v = tval_sexpr();
+    if (strstr(t->tag, "qexpr")) v = tval_qexpr();
 
     for (size_t i = 0; i < t->children_num; i++) {
+        if (strcmp(t->children[i]->contents, "{") == 0) continue;
+        if (strcmp(t->children[i]->contents, "}") == 0) continue;
         if (strcmp(t->children[i]->contents, "(") == 0) continue;
         if (strcmp(t->children[i]->contents, ")") == 0) continue;
         if (strcmp(t->children[i]->tag, "regex") == 0) continue;
@@ -98,60 +119,168 @@ tval* tval_throw(tval* v, size_t pos) {
     return x;
 }
 
-tval* operate(tval* v, const char* sym) {
+tval* tval_join(tval* dest, tval* src) {
+    while (src->count)
+        dest = tval_add(dest, tval_pop(src, 0));
+
+    tval_del(src);
+    return dest;
+}
+
+tval* op_list(tval* v) {
+    v->type = TVAL_QEXPR;
+    return v;
+}
+
+tval* op_head(tval* q) {
+    TASSERT(q, q->count == 1,
+            "Couldn't evaluate q-expr('head' only takes single argument!)");
+    TASSERT(q, q->list[0]->type == TVAL_QEXPR,
+            "Incorrect type passed to 'head'(must be a qexpr!)");
+    TASSERT(q, q->list[0]->count > 0, "Got empty qexpr!");
+
+    tval* v = tval_throw(q, 0);
+    while (v->count > 1)
+        tval_del(tval_pop(v, 1));
+    return v;
+}
+
+tval* op_tail(tval* q) {
+    TASSERT(q, q->count == 1,
+            "Couldn't evaluate q-expr('tail' only takes single argument!)");
+    TASSERT(q, q->list[0]->type == TVAL_QEXPR,
+            "Incorrect type passed to 'tail'(must be a qexpr!)");
+    TASSERT(q, q->list[0]->count > 0, "Got empty qexpr!");
+
+    tval* v = tval_throw(q, 0);
+    tval_del(tval_pop(v, 0));
+    return v;
+}
+
+tval* op_join(tval* v) {
     for (size_t i = 0; i < v->count; i++) {
-        if (v->list[i]->type != TVAL_NUM) {
-            tval_del(v);
-            return tval_err("Can not operate on non number!");
+        TASSERT(v, v->list[i]->type == TVAL_QEXPR,
+                "Incorrect type passed to 'join'(must be a qexpr!)");
+    }
+
+    tval* x = tval_pop(v, 0);
+    while (v->count)
+        x = tval_join(x, tval_pop(v, 0));
+
+    return x;
+}
+
+tval* op_eval(tval* q) {
+    TASSERT(q, q->count == 1,
+            "Couldn't evaluate q-expr('eval' only takes single argument!)");
+    TASSERT(q, q->list[0]->type == TVAL_QEXPR,
+            "Incorrect type passed to 'eval'(must be a qexpr!)");
+
+    tval* v = tval_throw(q, 0);
+    v->type = TVAL_SEXPR;
+    return tval_eval(v);
+}
+
+tval* op_min(tval* q) {
+    TASSERT(q, q->count == 1,
+            "Couldn't evaluate q-expr('min' only takes single argument!)");
+    TASSERT(q, q->list[0]->type == TVAL_QEXPR,
+            "Incorrect type passed to 'min'(must be a qexpr!)");
+
+    tval* v = tval_throw(q, 0);
+
+    while (v->count > 1) {
+        if (v->list[0]->num < v->list[1]->num) {
+            tval_del(tval_pop(v, 1));
+        } else {
+            tval_del(tval_pop(v, 0));
         }
     }
 
-    tval* current = tval_pop(v, 0);
+    return v;
+}
+
+tval* op_max(tval* q) {
+    TASSERT(q, q->count == 1,
+            "Couldn't evaluate q-expr('max' only takes single argument!)");
+    TASSERT(q, q->list[0]->type == TVAL_QEXPR,
+            "Incorrect type passed to 'max'(must be a qexpr!)");
+
+    tval* v = tval_throw(q, 0);
+
+    while (v->count > 1) {
+        if (v->list[0]->num > v->list[1]->num) {
+            tval_del(tval_pop(v, 1));
+        } else {
+            tval_del(tval_pop(v, 0));
+        }
+    }
+
+    return v;
+}
+
+tval* op_arith(tval* v, const char* sym) {
+    for (size_t i = 0; i < v->count; i++) {
+        if (v->list[i]->type != TVAL_NUM) {
+            tval_del(v);
+            return tval_err("Couldn't evaluate s-expression"
+                            "(can not operate on non-number)!");
+        }
+    }
+
+    tval* curr = tval_pop(v, 0);
     while (v->count > 0) {
         tval* next = tval_pop(v, 0);
 
-        if (strcmp(sym, "+") == 0) current->num += next->num;
-        if (strcmp(sym, "-") == 0) current->num -= next->num;
-        if (strcmp(sym, "*") == 0) current->num *= next->num;
-        if (strcmp(sym, "^") == 0) current->num = pow(current->num, next->num);
+        if (strcmp(sym, "+") == 0) curr->num += next->num;
+        if (strcmp(sym, "-") == 0) curr->num -= next->num;
+        if (strcmp(sym, "*") == 0) curr->num *= next->num;
+        if (strcmp(sym, "^") == 0) curr->num = pow(curr->num, next->num);
         if (strcmp(sym, "/") == 0) {
             if (next->num == 0) {
-                tval_del(next), tval_del(current);
-                current = tval_err("Division by zero isn't allowed!");
+                tval_del(next), tval_del(curr);
+                curr = tval_err("Couldn't evaluate s-expression"
+                                "(division by zero isn't allowed)!");
                 break;
             }
-            current->num /= next->num;
+            curr->num /= next->num;
         }
-
-        if (strcmp(sym, "min") == 0)
-            current->num =
-                (current->num < next->num) ? current->num : next->num;
-
-        if (strcmp(sym, "max") == 0)
-            current->num =
-                (current->num > next->num) ? current->num : next->num;
-
         tval_del(next);
     }
 
     tval_del(v);
-    return current;
+    return curr;
+}
+
+tval* operate(tval* v, const char* op) {
+    if (strcmp("list", op) == 0) return op_list(v);
+    if (strcmp("head", op) == 0) return op_head(v);
+    if (strcmp("tail", op) == 0) return op_tail(v);
+    if (strcmp("join", op) == 0) return op_join(v);
+    if (strcmp("eval", op) == 0) return op_eval(v);
+    if (strcmp("min", op) == 0) return op_min(v);
+    if (strcmp("max", op) == 0) return op_max(v);
+    if (strstr("+-/*^", op)) return op_arith(v, op);
+
+    tval_del(v);
+    return tval_err("Undefined function!");
 }
 
 tval* tval_eval_sexpr(tval* v) {
-    if (v->count == 0) return v;
-    if (v->count == 1) return tval_throw(v, 0);
-
     for (size_t i = 0; i < v->count; i++)
         v->list[i] = tval_eval(v->list[i]);
 
     for (size_t i = 0; i < v->count; i++)
         if (v->list[i]->type == TVAL_ERR) return tval_throw(v, i);
 
+    if (v->count == 0) return v;
+    if (v->count == 1) return tval_throw(v, 0);
+
     tval* init = tval_pop(v, 0);
     if (init->type != TVAL_SYM) {
         tval_del(init), tval_del(v);
-        return tval_err("S-Expression doesn't start with a symbol!");
+        return tval_err(
+            "Couldn't parse s-expression(must start with a symbol!)");
     }
     tval* result = operate(v, init->sym);
     tval_del(init);
@@ -159,8 +288,7 @@ tval* tval_eval_sexpr(tval* v) {
 }
 
 tval* tval_eval(tval* v) {
-    if (v->type == TVAL_SEXPR) return tval_eval_sexpr(v);
-    return v;
+    return (v->type == TVAL_SEXPR) ? tval_eval_sexpr(v) : v;
 }
 
 void tval_print_expr(tval* v, const char sym_open, const char sym_close) {
@@ -178,6 +306,7 @@ void tval_print(tval* v) {
         case TVAL_ERR: printf("Error: %s", v->err); break;
         case TVAL_SYM: printf("%s", v->sym); break;
         case TVAL_SEXPR: tval_print_expr(v, '(', ')'); break;
+        case TVAL_QEXPR: tval_print_expr(v, '{', '}'); break;
     }
 }
 
