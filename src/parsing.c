@@ -175,41 +175,38 @@ tval* op_eval(tval* q) {
     return tval_eval(v);
 }
 
-tval* op_min(tval* q) {
-    TASSERT(q, q->count == 1,
-            "Couldn't evaluate q-expr('min' only takes single argument!)");
-    TASSERT(q, q->list[0]->type == TVAL_QEXPR,
-            "Incorrect type passed to 'min'(must be a qexpr!)");
+tval* op_cmpr(tval* q) {
+    TASSERT(q, q->count == 2, "Invalid number of argumets passed!");
+    TASSERT(q, q->list[0]->type == TVAL_SYM,
+            "Incorrect argument type(first argument must be an operator!)");
+    TASSERT(q, q->list[1]->type == TVAL_QEXPR,
+            "Incorrect argument type(second argument must be a qexpr!)");
 
-    tval* v = tval_throw(q, 0);
+    char* sym = malloc(strlen(q->list[0]->sym) + 1);
+    strcpy(sym, q->list[0]->sym);
+    if (strcmp(sym, "min") && strcmp(sym, "max")) {
+        return tval_err("Invalid operator(either use 'min' or 'max'!)");
+    }
 
-    while (v->count > 1) {
-        if (v->list[0]->num < v->list[1]->num) {
-            tval_del(tval_pop(v, 1));
-        } else {
-            tval_del(tval_pop(v, 0));
+    tval* v = tval_throw(q, 1);
+    for (size_t i = 0; i < v->count; i++) {
+        if (v->list[i]->type != TVAL_NUM) {
+            return tval_err(
+                "Invalid element passed inside qexpr(must be a number!)");
         }
     }
 
-    return v;
-}
-
-tval* op_max(tval* q) {
-    TASSERT(q, q->count == 1,
-            "Couldn't evaluate q-expr('max' only takes single argument!)");
-    TASSERT(q, q->list[0]->type == TVAL_QEXPR,
-            "Incorrect type passed to 'max'(must be a qexpr!)");
-
-    tval* v = tval_throw(q, 0);
-
+    long curr, next;
     while (v->count > 1) {
-        if (v->list[0]->num > v->list[1]->num) {
-            tval_del(tval_pop(v, 1));
-        } else {
-            tval_del(tval_pop(v, 0));
-        }
+        curr = v->list[0]->num, next = v->list[1]->num;
+        int cmpr = strcmp(sym, "min") == 0
+                        ? (curr < next)
+                        : (strcmp(sym, "max") == 0 && curr > next);
+
+        tval_del(tval_pop(v, cmpr ? 1 : 0));
     }
 
+    free(sym);
     return v;
 }
 
@@ -252,8 +249,7 @@ tval* operate(tval* v, const char* op) {
     if (strcmp("tail", op) == 0) { return op_tail(v); }
     if (strcmp("join", op) == 0) { return op_join(v); }
     if (strcmp("eval", op) == 0) { return op_eval(v); }
-    if (strcmp("min", op) == 0) { return op_min(v); }
-    if (strcmp("max", op) == 0) { return op_max(v); }
+    if (strcmp("cmpr", op) == 0) { return op_cmpr(v); }
     if (strstr("+-/*^", op)) { return op_arith(v, op); }
 
     tval_del(v);

@@ -16,7 +16,8 @@ int main(void) {
         "                                                                       \
             number   : /-?[0-9]+/ ;                                             \
             symbol   : '+' | '-' | '*' | '/' | '%' | '^' | \"min\" | \"max\"    \
-                     | \"list\" | \"head\" | \"tail\" | \"join\" | \"eval\" ;   \
+                     | \"cmpr\" | \"list\" | \"head\" | \"tail\" | \"join\"     \
+                     | \"eval\" ;                                               \
             sexpr    : '(' <expr>* ')' ;                                        \
             qexpr    : '{' <expr>* '}' ;                                        \
             expr     : <number> | <symbol> | <sexpr> | <qexpr> ;                \

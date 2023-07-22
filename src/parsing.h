@@ -42,8 +42,7 @@ tval* op_head(tval*);
 tval* op_tail(tval*);
 tval* op_join(tval*);
 tval* op_eval(tval*);
-tval* op_min(tval*);
-tval* op_max(tval*);
+tval* op_cmpr(tval*);
 tval* op_arith(tval*, const char* symbol);
 tval* operate(tval*, const char* op);
 
