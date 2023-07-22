@@ -131,7 +131,7 @@ tval* op_list(tval* v) {
 
 tval* op_head(tval* q) {
     TASSERT(q, q->count == 1,
-            "Couldn't evaluate q-expr('head' only takes single argument!)");
+            "'head' only takes single argument(must be a qexpr!)");
     TASSERT(q, q->list[0]->type == TVAL_QEXPR,
             "Incorrect type passed to 'head'(must be a qexpr!)");
     TASSERT(q, q->list[0]->count > 0, "Got empty qexpr!");
@@ -143,7 +143,7 @@ tval* op_head(tval* q) {
 
 tval* op_tail(tval* q) {
     TASSERT(q, q->count == 1,
-            "Couldn't evaluate q-expr('tail' only takes single argument!)");
+            "'tail' only takes single argument(must be a qexpr!)");
     TASSERT(q, q->list[0]->type == TVAL_QEXPR,
             "Incorrect type passed to 'tail'(must be a qexpr!)");
     TASSERT(q, q->list[0]->count > 0, "Got empty qexpr!");
@@ -166,7 +166,7 @@ tval* op_join(tval* v) {
 
 tval* op_eval(tval* q) {
     TASSERT(q, q->count == 1,
-            "Couldn't evaluate q-expr('eval' only takes single argument!)");
+            "'eval' only takes single argument(must be a qexpr!)");
     TASSERT(q, q->list[0]->type == TVAL_QEXPR,
             "Incorrect type passed to 'eval'(must be a qexpr!)");
 
@@ -234,7 +234,7 @@ tval* op_arith(tval* v, const char* sym) {
             if (next->num == 0) {
                 tval_del(next), tval_del(curr);
                 curr = tval_err("Couldn't evaluate s-expression"
-                                "(division by zero isn't allowed)!");
+                                "(division by zero isn't allowed!)");
                 break;
             }
             curr->num /= next->num;
